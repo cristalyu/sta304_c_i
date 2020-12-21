@@ -1,0 +1,186 @@
+---
+title: "Newspapers in Times of Low Advertising Revenues"
+author: "127954"
+date: "12/20/2020"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+bibliography: ha.bib
+---
+
+```{r setup, include=FALSE}
+#options(show.error.messages = F, warn=0)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Abstract
+
+In this paper, an attempt was made to model the relationship between newspapers’ content and reducion in prices of advertising revenues. Specifically, we investigate the reduction in advertising revenues as it affect creation of reasonable newspaper content.  A reanalysis of the data originally generatd by @angelucci2019newspapers was done to emprically study the hypothesized claim. The dataset represent unique entries of French newspapers between 1960 and 1974. A similar findings as observed in the original paper was found.
+
+# Introduction
+
+The main question of this study is that there is no doubt that there is a reduction in newspapers sales and that the claim of newspapers industries losing their clients can be hardly disputed, especially due to rising popularity online media. The time period of the study are 60s and 70s. During this period the major event of interest has took place, namely in 1967 TV advertisement was allowed in France. The study shows the effect of emergence of new concurence on advertisement revenue of national newspapers as well as discussing other relevant issues.
+
+There exist a broader argument that shows that the newspaper industries are currently in state of despair (@boczkowski2017incidental). The author claimed that the advent of internet had drastically reduced the use of newspaper and generally speaking the readership of newspaper is on the brim.
+
+While there is remarkably decline, @angelucci2019newspapers claimed that there exist another factor that determines the the existence of newspaper. The factor is consumer preference (@athey2013impact).
+
+Thus, in this paper, we investigate the reduction in advertising revenues as it affect creation of reasonable newspaper content.  A reanalysis of the data originally generatd by @angelucci2019newspapers was done to emprically study the hypothesized claim. The dataset represent unique entries of French newspapers between 1960 and 1974. A similar findings as observed in the original paper was found.
+
+
+## Data
+
+The data contains panel of almost 100 newspapers, of which 12 are national newspapers that are sold everywhere in France and have nationwide audiance and 88 are local newspapers. The panel is not balanced with the number of newspapers varying over time. All analysis were carried out in (@team2019language; @robinson7broom; @sjoberg2020gtsummary; @xie2013knitr; @hester2019welcome).
+
+The table below summarises basic statics for local and national newspapers 
+
+```{r, echo=FALSE, message=F}
+
+library(here)
+library(haven)
+library(huxtable)
+library(scales)
+library(tidyverse)
+library(xtable)
+library(knitr)
+library(papeR)
+library(summarytools)
+#setwd("C:\\Users\\bakue\\Documents\\Job\\20201209_mrd\\data")
+
+newspapers=read_dta(file="C:/Users/ACER/Desktop/My files/Recent analysis 2/Angelucci_Cage_AEJMicro_dataset.dta")
+
+newspapers <- 
+  newspapers %>% 
+  dplyr::select(year, id_news, after_national, local, national, # Diff in diff variables
+                ra_cst, qtotal, ads_p4_cst, ads_s, # Advertising side dependents
+                ps_cst, po_cst, qtotal, qs_s, rs_cst) %>% #Reader side dependents
+  mutate(ra_cst_div_qtotal = ra_cst / qtotal/10^6) %>% # An advertising side dependents needs to be built
+  mutate_at(vars(id_news, after_national, local, national), ~as.factor(.)) %>% # Change some to factors
+  mutate(year = as.integer(year))
+news.sums=t(apply(newspapers[newspapers$local==1,c("ra_cst","rs_cst","qtotal","ads_s")], 2, function(x) cbind(mean(x,na.rm=T),median(x,na.rm=T),length(x[!is.na(x)]))))
+row.names(news.sums)=c("Revenue from advertising (in Mio.)", "Revenue from sales (in Mio.)","No. circulation", "Percentage of advertisement pages" )
+
+news.sums[1:2,1:2]=news.sums[1:2,1:2]/10^6
+kable(news.sums,col.names = c("Mean","Median", "No. obs"), digits=0, caption="Basic statictics of main variables for local newspapers")
+
+
+
+``` 
+
+
+
+
+```{r, echo=FALSE, message=F}
+
+news.sums=t(apply(newspapers[newspapers$local==0,c("ra_cst","rs_cst","qtotal","ads_s")], 2, function(x) cbind(mean(x,na.rm=T),median(x,na.rm=T),length(x[!is.na(x)]))))
+row.names(news.sums)=c("Revenue from advertising (in Mio.)", "Revenue from sales (in Mio.)","No. circulation", "Percentage of advertisement pages" )
+
+news.sums[1:2,1:2]=news.sums[1:2,1:2]/10^6
+kable(news.sums,col.names = c("Mean","Median", "No. obs"), digits=0, caption="Basic statictics of main variables for national newspapers")
+
+
+
+``` 
+The first analysis of data shows that the two newspaper type should be considered separately. This is good demonstrated by the comparison of average ads revenues before and after introduction of TV advertisement. As mentioned in the bar plot the revenues are expressed in constant 2014 euros to overcome the inflation effect.  The bar plot shows that with the emergence of the new competitor the advertisement revenues from national newspapers are declining whereas the advertisement revenues from local newspapers are rising. Such a difference in trends is explaned by different nature of advertisement in national and local newspapers: advertisement of branded products and services in national newspapers compared to classified ads or ads for local shops. It is not surprising therefore that local neswpapers are not affected by TV.
+
+```{r, echo=FALSE}
+ads_industry=read_dta(file="C:/Users/ACER/Desktop/My files/Recent analysis 2/Angelucci_Cage_AEJMicro_Descriptive_evidence_advertising_industry.dta") 
+
+ads_data=data.frame(paper_type=rep("Local",2),ads_revenue=ads_industry$adpqr, year=ads_industry$year)
+ads_data=rbind(ads_data, data.frame(paper_type=rep("National",2),ads_revenue=ads_industry$adpqn, year=ads_industry$year))
+
+ barplot(ads_revenue~year+paper_type,data=ads_data, beside=T,ylab="Mio. (constant 2014) euros", main="Comparion of average revenues from advertising \nbefore and after introduction of TV ads.",xlab="",legend.text=c("1967","1974"))
+
+   
+```
+
+
+
+
+
+# Model
+
+The model that we are to build uses diffenrence in difference approach (DiD) to evaluate the above described effect of introduction TV ads on national newspapers. 
+
+
+$$y_{n,t} = \alpha + \beta (D_{after} \times  D_{national}) + \gamma_n + \psi_t + \epsilon_{n,t}$$
+
+where $n$ indexes newspapers and $t$ - years ( t = 1960, … , 1974 ). The two set of variables account for fixed effect ($\gamma_n$) and time ($\psi_t$). Coding the reference category as national newspaper the dummy variable, ($D_{national}$, sets the national newspapers as treatment and local newspapers as control. The indicator variable, $D_{after}$, for year in which TV ads were introduced is of the main interest. Such model can be easily estimated with OLS methods.      
+
+
+# Results
+
+
+```{r, echo=FALSE, message=F}
+ad_revenue <- lm(log(ra_cst) ~ after_national +id_news + year, data = newspapers)
+ad_revenue_div_circulation <- lm(log(ra_cst_div_qtotal) ~ after_national + id_news + year, data = newspapers)
+ad_price <- lm(log(ads_p4_cst) ~ after_national + id_news + year, data = newspapers)
+ad_space <- lm(log(ads_s) ~ after_national + id_news + year, data = newspapers)
+
+
+```
+
+The first model that we are to consider is where the dependent variable is revenue from advertisement. 
+
+$${adsrevenue} = \alpha + \beta (D_{after} \times  D_{national}) + \gamma_n + \psi_t + \epsilon_{n,t}$$
+
+
+```{r, echo=FALSE, message=F}
+ad_coefs=coef(ad_revenue)
+omit_vars =names(ad_coefs[which(substr(names(ad_coefs),1,6)=="id_new")])
+
+omit_vars<- c("(Intercept)", omit_vars)
+
+huxreg("Ad. rev." = ad_revenue, 
+       omit_coefs = omit_vars, 
+       number_format = 2
+)
+```
+
+The table above summarises the results form model fit. The variable of the main interest, $D_{after}$, is significantly negative, which confirms that the introduction of TV ads had negative effect on revenue from national newspapers.
+
+
+
+
+```{r, echo=FALSE, message=F}
+# Consumer side
+subscription_price <- lm(log(ps_cst) ~ after_national + id_news + year, data = newspapers)
+unit_price <- lm(log(po_cst) ~ after_national + id_news + year, data = newspapers)
+circulation <- lm(log(qtotal) ~ after_national + id_news + year, data = newspapers)
+share_of_sub <- lm(log(qs_s) ~ after_national + id_news + year, data = newspapers)
+revenue_from_sales <- lm(log(rs_cst) ~ after_national + id_news + year, data = newspapers)
+
+con_coefs=c(coef(circulation))
+omit_con_vars =names(con_coefs[which(substr(names(con_coefs),1,6)=="id_new")])
+
+omit_con_vars<- c("(Intercept)", omit_con_vars)
+
+
+huxreg("Circulation" = circulation, 
+       #"Revenue from sales" = revenue_from_sales,
+       omit_coefs = omit_con_vars, 
+       number_format = 2)
+```
+
+Another variable of interest is circulation of newspapers will also be used in difference in difference model. The results from this fit confirm the negative effect of TV ads on national newspapers.
+
+# Limitations.
+
+Although the results of model find logical interpretation even today by many researcher in media studies, there are certain limitations to the model, that are to be discussed in this section.
+
+## Unbalanced and missing data
+ As it has been mentioned the data is not balanced and has missing values. 
+ 
+## Small sample size of national newspapers
+Sample size of national newspapers is only 12 which could be argued being relatively small.
+
+## Overparametrisation
+The model has relatively large number of parameters (fixed effects) 
+
+# Code
+
+# References
